@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="style.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <title>Matrix Telegram v2.6</title>
+    <style>
+        body { background: black; overflow: hidden; margin: 0; font-family: 'Courier New', Courier, monospace; }
+        canvas { position: fixed; top: 0; left: 0; z-index: -1; opacity: 0.3; }
+        #chatControls, h1, p, #statusLog { position: relative; z-index: 10; color: #00ff41; }
+        #statusLog { height: 400px; overflow-y: auto; border: 1px solid #00ff41; padding: 10px; background: rgba(0,0,0,0.8); }
+        .shake { animation: shake 0.5s; }
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            20% { transform: translate(-3px, 0px) rotate(-1deg); }
+            40% { transform: translate(3px, 2px) rotate(1deg); }
+            60% { transform: translate(-1px, -1px) rotate(0deg); }
+            80% { transform: translate(-3px, 1px) rotate(-1deg); }
+            100% { transform: translate(1px, -2px) rotate(1deg); }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="matrixRain"></canvas>
+    <audio id="alertSound" src="alert.mp3" preload="auto"></audio>
+
+    <h1>MATRIX TELEGRAM v2.6</h1>
+    <p>Host: i5-2400S | Status: <span id="con-status" style="color:#00ff41">CONNECTED</span></p>
+    <div id="statusLog">-- ENCRYPTION ACTIVE -- <span class="cursor"></span></div>
+    <div id="chatControls">
+        <input type="password" id="secretKey" placeholder="Secret Key">
+        <input type="text" id="userName" placeholder="Handle">
+        <input type="text" id="messageInput" placeholder="Message...">
+        <button onclick="sendMessage()">SEND / LOGIN</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('matrixRain');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789αβγδεζηθικλμνξοπρστυφχψω";
+        const fontSize = 16;
+        const columns = canvas.width / fontSize;
+        const rainDrops = Array.from({ length: columns }).fill(1);
+
+        function draw() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#0F0';
+            ctx.font = fontSize + 'px monospace';
+            for (let i = 0; i < rainDrops.length; i++) {
+                const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+                if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) rainDrops[i] = 0;
+                rainDrops[i]++;
+            }
+        }
+        setInterval(draw, 30);
+
+        var socket = io({ reconnection: true, reconnectionAttempts: 5, reconnectionDelay: 1000 });
+        var log = document.getElementById('statusLog');
+        var statusIndicator = document.getElementById('con-status');
+        var alertSound = document.getElementById('alertSound');
+
+        window.onload = function() {
+            let key = localStorage.getItem('matrixKey') || "";
+            let name = localStorage.getItem('matrixName') || "";
+            document.getElementById('secretKey').value = key;
+            document.getElementById('userName').value = name;
+            if(key && name) socket.emit('request history', { name: name, key: key });
+        };
+
+        socket.on('chat history load', function(historyArray) {
+            log.innerHTML = "-- ENCRYPTION ACTIVE -- <span class='cursor'></span>";
+            historyArray.forEach(msg => {
+                log.innerHTML = log.innerHTML.replace('<span class="cursor"></span>', "");
+                log.innerHTML += `<br>> <span style="color: ${msg.color || '#00ff41'}">${msg.text}</span><span class="cursor"></span>`;
+            });
+            log.scrollTop = log.scrollHeight;
+        });
+
+        socket.on('disconnect', () => {
+            statusIndicator.innerText = "OFFLINE - RECONNECTING...";
+            statusIndicator.style.color = "#ff0000";
+        });
+
+        socket.on('connect', () => {
+            statusIndicator.innerText = "CONNECTED";
+            statusIndicator.style.color = "#00ff41";
+            let savedKey = localStorage.getItem('matrixKey');
+            let savedName = localStorage.getItem('matrixName');
+            if(savedKey && savedName) socket.emit('request history', { name: savedName, key: savedKey });
+        });
+
+        socket.on('chat message', function(data) {
+            log.innerHTML = log.innerHTML.replace('<span class="cursor"></span>', "");
+            if (data.text.includes("Denied") || data.text.includes("Exile") || data.text.includes("TERMINATED")) {
+                alertSound.play().catch(e => {});
+                log.style.borderColor = "#ff0000";
+                log.style.boxShadow = "0 0 30px #ff0000";
+                log.classList.add('shake');
+                setTimeout(() => {
+                    log.classList.remove('shake');
+                    log.style.borderColor = "#00ff41"; 
+                    log.style.boxShadow = "0 0 15px #00ff41";
+                }, 500);
+            }
+            if (!data.text.includes("Access Granted")) {
+                log.innerHTML += `<br>> <span style="color: ${data.color || '#00ff41'}">${data.text}</span><span class="cursor"></span>`;
+            } else {
+                log.innerHTML += `<br>> <span style="color: #00ff41">SYSTEM: ONLINE</span><span class="cursor"></span>`;
+            }
+            log.scrollTop = log.scrollHeight;
+        });
+
+        function sendMessage() {
+            let key = document.getElementById('secretKey').value;
+            let name = document.getElementById('userName').value || "Anon";
+            let msg = document.getElementById('messageInput').value;
+            localStorage.setItem('matrixKey', key);
+            localStorage.setItem('matrixName', name);
+            if(msg) {
+                socket.emit('chat message', { name: name, text: msg, key: key });
+                document.getElementById('messageInput').value = "";
+            } else {
+                socket.emit('request history', { name: name, key: key });
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
